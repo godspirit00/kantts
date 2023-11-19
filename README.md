@@ -1,12 +1,15 @@
 # kantts
-TTS appalication based on modelscope KAN-TTS
+TTS application based on modelscope KAN-TTS
 
 ## demo
 `python demo.py`
-
+OR
+`python read.py` for a more interactive way to run models
 ## Features - 特性
 - 增加语速调节，scale参数调节
 - 推理加速
+
+  * tensorrt is disabled for now as I was not able to install it on my WSL 🤣 *
   
   1.HifiGAN tensorrt加速
   
