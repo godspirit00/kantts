@@ -1,6 +1,12 @@
 # kantts
 TTS application based on modelscope KAN-TTS
 
+## Installation
+```
+pip install modelscope torch onnxruntime onnx pytorch_wavelets
+pip install kantts -f https://modelscope.oss-cn-beijing.aliyuncs.com/releases/repo.html
+```
+
 ## demo
 `python demo.py`
 OR
