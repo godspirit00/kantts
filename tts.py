@@ -7,7 +7,7 @@ import uuid
 import torch
 
 from tensorrt_onnx.run_onnx import ONNXModel
-from tensorrt_onnx.run_trt import TRTWrapper
+# from tensorrt_onnx.run_trt import TRTWrapper
 from kantts.bin.infer_sambert import am_init, am_synthesis
 from kantts.bin.infer_hifigan import hifigan_init
 from kantts.utils.ling_unit.ling_unit import KanTtsLinguisticUnit
@@ -84,10 +84,10 @@ class TTS():
 
         logging.info(f"HifiGAN infer using : {infer_type}.......")
         if infer_type == "torch":
-            self.hifigan_model = hifigan_init(ckpt_path=os.path.join(self.voc_ckpt, "ckpt/checkpoint_0.pth"),
+            voc_p = glob(os.path.join(self.voc_ckpt, "ckpt","checkpoint_*.pth"))[-1]
+            self.hifigan_model = hifigan_init(ckpt_path=voc_p,
                                          config=self.voc_config)
-            p = os.path.join(self.voc_ckpt, "ckpt/checkpoint_0.pth")
-            logging.info(f"Loading HifiGAN checkpoint: {p}")
+            logging.info(f"Loading HifiGAN checkpoint: {voc_p}")
         elif infer_type == "onnx_cpu":
             self.hifigan_model = ONNXModel(f"./tensorrt_onnx/model_save/simplify_model_{voice}.onnx", device='cpu')
             logging.info(f"Loading HifiGAN checkpoint: ./tensorrt_onnx/model_save/simplify_model_{voice}.onnx")
@@ -95,12 +95,13 @@ class TTS():
             self.hifigan_model = ONNXModel(f"./tensorrt_onnx/model_save/simplify_model_{voice}.onnx", device='gpu')
             logging.info(f"Loading HifiGAN checkpoint: ./tensorrt_onnx/model_save/simplify_model_{voice}.onnx")
         elif infer_type == "trt":
+            raise NotImplementedError
             self.hifigan_model = TRTWrapper(f"./tensorrt_onnx/model_save/simplify_model_{voice}.engine", ['output'])
             logging.info(f"Loading HifiGAN checkpoint: ./tensorrt_onnx/model_save/simplify_model_{voice}.engine")
         else:
             print("Wrong infer type......")
 
-        self.am_model = am_init(ckpt=os.path.join(self.am_ckpt, "ckpt/checkpoint_0.pth"), config=self.am_config)
+        self.am_model = am_init(ckpt=glob(os.path.join(self.am_ckpt, "ckpt","checkpoint_*.pth"))[-1], config=self.am_config)
 
         self.fe = ttsfrd.TtsFrontendEngine()
         self.fe.initialize(self.resource_dir)
@@ -161,11 +162,6 @@ class TTS():
         with open(symbols_file, encoding="utf-8") as f:
             for i, line in enumerate(f):
                 line = line.strip().split("\t")
-                # logging.info("Inference sentence: {}".format(line[0]))
-                # mel_path = "%s/%s_mel.npy" % (results_dir, line[0])
-                # dur_path = "%s/%s_dur.txt" % (results_dir, line[0])
-                # f0_path = "%s/%s_f0.txt" % (results_dir, line[0])
-                # energy_path = "%s/%s_energy.txt" % (results_dir, line[0])
 
                 t0 = time.time()
                 with torch.no_grad():
@@ -178,25 +174,15 @@ class TTS():
                 mel_data = mel_post.transpose(1, 0).unsqueeze(0)
 
                 if self.infer_type == "torch":
-                    # mel_data = torch.tensor(mel_post, dtype=torch.float).to(device)
-                    # print("mel_data.shape: ", mel_data.shape)
                     y = self.hifigan_model(mel_data)
                     y = y.view(-1).detach().cpu().numpy()
                 elif self.infer_type in ["onnx_cpu", "onnx_gpu"]:
                     out_onnx = self.hifigan_model.onnx_session.run([], input_feed={'input': mel_data.cpu().numpy()})
                     y = np.squeeze(out_onnx[0])
-                    # print("y shape: ", y.shape)
                 elif self.infer_type == 'trt':
                     output = self.hifigan_model(dict(input=mel_data.cuda()))
-                    # print(output)
-                    # print(output['output'].shape)
                     y = output['output'].view(-1).detach().cpu().numpy()
 
-                # if hasattr(self.hifigan_model, "pqmf"):
-                #     print("----------------------")
-                #     y = self.hifigan_model.pqmf.synthesis(y)
-                # y = y.view(-1).detach().cpu().numpy()
-                # pcm_len += len(y)
                 t2 = time.time()
                 print("hifigan infer time: ", (t2-t1)*1000, " ms")
                 # print(y)
@@ -204,29 +190,7 @@ class TTS():
                 save_wav(y, os.path.join(self.output_dir, f"{i}_gen.wav"))
 
 
-        # t1 = time.time()
-        # print("文本前端infer time: ", t1-t0)
 
-
-        # t0 = time.time()
-        # logging.info("AM is infering...")
-        # # am_forward(symbols_file, os.path.join(am_ckpt, "ckpt/checkpoint_0.pth"), output_dir, se_file, config=am_config)
-        # am_forward(ckpt=os.path.join(self.am_ckpt, "ckpt/checkpoint_0.pth"), sentence=symbols_file, model=self.am_model,
-        #            output_dir=self.output_dir, se_file=None, config=self.am_config, scale=scale)
-        # t1 = time.time()
-        # print("am_forward time: ", t1-t0)
-
-        # t0 = time.time()
-        # logging.info("Vocoder is infering...")
-        # hifigan_forward(os.path.join(self.output_dir, "feat"), model=self.hifigan_model, output_dir=self.output_dir)
-        # t1 = time.time()
-        # print("hifigan_forward time: ", t1-t0)
         self.concat_process(self.output_dir, os.path.join(self.output_dir, "res_wavs"))
-        # t2 = time.time()
-        # print("concat_process time: ", t2 - t1)
-
-        # logging.info("Text to wav finished!")
-        # t1 = time.time()
-        # print("infer time: ", t1-t0)
 
         return self.output_dir
